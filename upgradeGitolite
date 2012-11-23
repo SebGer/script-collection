@@ -1,0 +1,61 @@
+#!/bin/bash
+
+GT_USER='git'
+GT_HOME='/srv/git'
+GT_BIN="$GT_HOME/bin"
+GT_REPO="$GT_HOME/gitolite"
+
+CURDIR=$(pwd)
+CUREXEC=$(basename $0)
+
+if [ "$(whoami)" != "$GT_USER" ]; then
+  # Make sure only root can run our script
+  if [[ $EUID -ne 0 ]]; then
+    echo "This script must be run as root" 1>&2
+    exit 1
+  else
+    cp $CUREXEC /tmp/
+    chmod +x /tmp/$CUREXEC
+    su -l $GT_USER -c "/tmp/$CUREXEC" 2>/dev/null
+    if [ "$?" != "0" ]; then
+      echo "An error has occured"
+      exit 2
+    fi
+    rm /tmp/$CUREXEC
+    exit 0
+  fi
+fi
+
+if [ ! -d $GT_REPO/.git ]; then
+  echo "$GT_REPO is no git repository"
+  exit 3
+fi
+
+cd $GT_REPO
+RES_PULL=$(git pull)
+if [ "$?" != "0" ]; then
+  echo 'Error while getting currenet changes (git pull)'
+  exit 4
+fi
+
+if [ "$RES_PULL" == "Already up-to-date." ]; then
+  echo 'Up-to-date. Nothing to do.'
+  cd $CURDIR
+  exit 0
+fi
+
+cd $GT_HOME
+$GT_REPO/install -ln $GT_BIN
+if [ "$?" != "0" ]; then
+  echo "Error while installing gitolite ($GT_REPO/install -ln $GT_BIN)"
+  exit 5
+fi
+
+gitolite setup
+if [ "$?" != "0" ]; then
+  echo 'Error while setting up gitolite (gitolite setup)'
+  exit 6
+fi
+
+cd $CURDIR
+exit 0
